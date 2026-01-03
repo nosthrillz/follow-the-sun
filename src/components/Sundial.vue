@@ -234,6 +234,7 @@ function handleMouseUp() {
 function handleTouchStart(event: TouchEvent) {
   event.preventDefault();
   isDragging.value = true;
+  emit('dragging', true);
   const touch = event.touches[0];
   if (touch) {
     updateTimeFromPosition(touch.clientX, touch.clientY);
