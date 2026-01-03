@@ -1,5 +1,5 @@
 <template>
-  <div class="info">
+  <div class="flex flex-col gap-1 md:text-lg">
     <div class="info-item">
       <span class="label">Current time:</span>
       <span class="value">{{ currentTime }}</span>
@@ -31,13 +31,6 @@ defineProps<Props>();
 </script>
 
 <style scoped>
-.info {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  font-size: 1.5rem;
-  text-align: center;
-}
 
 .info-item {
   display: flex;

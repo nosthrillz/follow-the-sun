@@ -1,12 +1,6 @@
 <template>
   <main :style="cssVariables">
-    <h1 class="text-9xl font-black">Follow the Sun</h1>
-    <InfoDisplay
-      :current-time="currentTime"
-      :next-event="nextEventInfo.event"
-      :time-until="formatDuration(nextEventInfo.minutesUntil)"
-      :blend-percentage="darkValue"
-    />
+    <h1 class="text-4xl md:text-6xl lg:text-8xl xl:text-9xl font-black">Follow the Sun</h1>
     <Sundial
       :events="sundialEvents"
       :progress-angle="sunProgressAngle"
@@ -14,6 +8,12 @@
       :is-override="isOverrideMode"
       @dragging="handleDragging"
       @reset="handleReset"
+    />
+    <InfoDisplay
+      :current-time="currentTime"
+      :next-event="nextEventInfo.event"
+      :time-until="formatDuration(nextEventInfo.minutesUntil)"
+      :blend-percentage="darkValue"
     />
     <footer class="footer">
       <button class="debug-button" @click="isDebugOpen = true">
@@ -192,8 +192,8 @@ main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 25vh;
-  gap: 2rem;
+  padding-top: 10vh;
+  gap: 4rem;
 
   /* HSL-based color system with tints based on time of day */
   /* Variables set dynamically from Vue computed properties */
