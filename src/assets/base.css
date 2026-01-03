@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+}
+
+:root {
+}
+
+@layer base {
+  body {
+    margin: 0;
+  }
+}
