@@ -1,12 +1,5 @@
 <template>
   <main :style="cssVariables">
-    <DebugInfo 
-      :sun-info="sunInfo"
-      :current-minutes="currentMinutes"
-      :dark-value="darkValue"
-      :text-contrast="textContrastComputed"
-      :current-lux="currentLux"
-    />
     <h1 class="text-9xl font-black">Follow the Sun</h1>
     <InfoDisplay
       :current-time="currentTime"
@@ -22,9 +15,31 @@
       @dragging="handleDragging"
       @reset="handleReset"
     />
-    <footer class="attribution">
-      Sun data from <a href="https://sunrise-sunset.org/" target="_blank" rel="noopener noreferrer">sunrise-sunset.org</a>
+    <footer class="footer">
+      <button class="debug-button" @click="isDebugOpen = true">
+        Debug
+      </button>
+      <div class="attribution">
+        Sun data from <a href="https://sunrise-sunset.org/" target="_blank" rel="noopener noreferrer">sunrise-sunset.org</a>
+      </div>
     </footer>
+
+    <DebugInfo
+      :open="isDebugOpen"
+      @close="isDebugOpen = false"
+      :sun-info="sunInfo"
+      :current-minutes="currentMinutes"
+      :dark-value="darkValue"
+      :text-contrast="textContrastComputed"
+      :current-lux="currentLux"
+      :bg-hue="bgHue"
+      :bg-saturation="bgSaturation"
+      :bg-lightness="bgLightness"
+      :bg-lightness-darker="bgLightnessDarker"
+      :text-hue="textHue"
+      :text-saturation="textSaturation"
+      :text-lightness="textLightness"
+    />
   </main>
 </template>
 
@@ -43,6 +58,7 @@ const lng = 8.5417;
 const currentMinutes = ref(0);
 const isDragging = ref(false);
 const isOverrideMode = ref(false);
+const isDebugOpen = ref(false);
 
 // Sun information state
 const sunInfo = ref<SunInformation | null>(null);
@@ -157,7 +173,7 @@ watch([isOverrideMode, isDragging], ([override, dragging]) => {
 onMounted(() => {
   // Initialize with current time
   currentMinutes.value = getCurrentTimeMinutes();
-  
+
   // Fetch sun information
   fetchSunInfo();
 
@@ -188,25 +204,49 @@ main {
   --tint-comp: 60;          /* Complementary hue for text */
   --sat-text: 15%;          /* Text saturation */
   --light-comp: 50%;        /* Complementary lightness for text */
-  
+
   /* Background colors using HSL */
   --bg: hsl(var(--tint), var(--sat), var(--light));
   --bg-darker: hsl(var(--tint), var(--sat), var(--light-darker));
 
   /* Radial gradient background for depth */
   background: radial-gradient(circle at bottom, var(--bg-darker) 0%, var(--bg) 100%);
-  
+
   /* Text color using complementary hue and inverted lightness */
   color: hsl(var(--tint-comp), var(--sat-text), var(--light-comp));
 }
 
-.attribution {
+.footer {
   position: fixed;
-  bottom: 0.5rem;
-  right: 0.5rem;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
   font-size: 0.75rem;
-  opacity: 0.6;
   z-index: 100;
+}
+
+.debug-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  cursor: pointer;
+  opacity: 0.8;
+  color: hsl(var(--tint-comp), var(--sat-text), var(--light-comp));
+  transition: opacity 0.2s ease;
+}
+
+.debug-button:hover {
+  opacity: 1;
+}
+
+.attribution {
+  opacity: 0.6;
 }
 
 .attribution a {
