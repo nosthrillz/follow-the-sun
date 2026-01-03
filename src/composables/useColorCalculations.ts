@@ -35,8 +35,8 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
-// Calculate hue based on sun cycle
-// Night: blue (240°), Sunrise: cyan→red→yellow (180°→0°→60°), Day: yellow-white (60°), Sunset: red→blue (0°→240°)
+// Calculate hue based on sun cycle (Rayleigh scattering)
+// Night: blue (240°), Sunrise: deep blue→lighter blue→yellow (240°→220°→60°, skipping green), Day: yellow-white (60°), Sunset: red→blue (0°→240°, via purple/magenta, skipping green)
 function calculateHue(
   minutes: number,
   sunrise: number,
@@ -90,11 +90,25 @@ function calculateHue(
     }
   }
 
-  // Civil twilight before sunrise: cyan to orange-red
+  // Civil twilight before sunrise: deep blue → lighter blue → yellow (skip green/cyan)
   if (minutes >= civilTwilightBegin && minutes < sunrise) {
     const progress = (minutes - civilTwilightBegin) / (sunrise - civilTwilightBegin);
-    // Cyan (180°) → orange-red (20°)
-    return 180 - (progress * 160);
+    
+    // First 40%: deep blue (240°) → lighter blue (220°)
+    // Next 60%: lighter blue (220°) → yellow (60°), skipping green/cyan range
+    // To avoid green (120°-180°), we go forwards through purple/magenta/red: 220° → 240° → 300° → 0° → 60°
+    if (progress < 0.4) {
+      // First 40%: deep blue (240°) → lighter blue (220°)
+      const earlyProgress = progress / 0.4;
+      return 240 - (earlyProgress * 20); // 240° → 220°
+    } else {
+      // Last 60%: lighter blue (220°) → yellow (60°)
+      // Go forwards through purple/magenta/red to avoid green: 220° → 240° → 300° → 0° → 60°
+      const lateProgress = (progress - 0.4) / 0.6;
+      // Distance going forwards: from 220° to 60° = (60 - 220 + 360) % 360 = 200°
+      // Formula: start at 220°, add 200° * progress, wrap around
+      return (220 + (200 * lateProgress)) % 360;
+    }
   }
 
   // Sunrise to solar noon: red → yellow → white-yellow
@@ -141,8 +155,9 @@ function calculateHue(
       return 20 - (midProgress * 20); // Back to red
     } else {
       const lateProgress = (progress - 0.6) / 0.4;
-      // From red (0°) to blue (240°) - goes through purple/magenta
-      return (lateProgress * 240) % 360;
+      // From red (0°) to blue (240°) - go backwards through purple/magenta to avoid green
+      // Go backwards: 0° → 300° → 240° (120° backwards total)
+      return (360 - (lateProgress * 120)) % 360;
     }
   }
 
