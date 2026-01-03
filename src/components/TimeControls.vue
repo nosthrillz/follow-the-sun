@@ -49,6 +49,7 @@ import { getTimeMinutes } from '../composables/useSunCalculations';
 
 interface Props {
   modelValue: number; // current minutes
+  isDragging?: boolean; // whether sundial is being dragged
 }
 
 const props = defineProps<Props>();
@@ -77,6 +78,35 @@ watch([demoHours, demoMinutes, demoSeconds], () => {
   }
 });
 
+// Watch for dragging state - enable demo mode when dragging starts
+watch(() => props.isDragging, (dragging) => {
+  if (dragging && !isDemoMode.value) {
+    // Dragging started, enable demo mode
+    isDemoMode.value = true;
+    // Sync the demo inputs with current time
+    const hours = Math.floor(props.modelValue / 60);
+    const mins = Math.floor(props.modelValue % 60);
+    const secs = Math.floor((props.modelValue % 1) * 60);
+    demoHours.value = hours;
+    demoMinutes.value = mins;
+    demoSeconds.value = secs;
+  }
+});
+
+// Watch for time updates from external sources (like sundial drag)
+// Sync demo inputs when time changes externally
+watch(() => props.modelValue, (newValue, oldValue) => {
+  if (oldValue !== undefined && newValue !== oldValue && isDemoMode.value) {
+    // Time changed externally while in demo mode, sync inputs
+    const hours = Math.floor(newValue / 60);
+    const mins = Math.floor(newValue % 60);
+    const secs = Math.floor((newValue % 1) * 60);
+    demoHours.value = hours;
+    demoMinutes.value = mins;
+    demoSeconds.value = secs;
+  }
+});
+
 // Watch for demo mode toggle
 watch(isDemoMode, (enabled) => {
   if (enabled) {
@@ -90,15 +120,21 @@ watch(isDemoMode, (enabled) => {
 });
 
 // When not in demo mode, sync with real time every second
+// But pause when dragging
 let realTimeInterval: number | null = null;
-watch(isDemoMode, (enabled) => {
-  if (!enabled) {
-    // Start real-time sync
-    realTimeInterval = setInterval(() => {
-      const now = new Date();
-      const currentMinutes = getTimeMinutes(now.getHours(), now.getMinutes(), now.getSeconds());
-      emit('update:modelValue', currentMinutes);
-    }, 1000) as unknown as number;
+watch([isDemoMode, () => props.isDragging], ([enabled, dragging]) => {
+  if (!enabled && !dragging) {
+    // Start real-time sync only if not in demo mode and not dragging
+    if (realTimeInterval === null) {
+      realTimeInterval = setInterval(() => {
+        // Double-check we're still not in demo mode or dragging
+        if (!isDemoMode.value && !props.isDragging) {
+          const now = new Date();
+          const currentMinutes = getTimeMinutes(now.getHours(), now.getMinutes(), now.getSeconds());
+          emit('update:modelValue', currentMinutes);
+        }
+      }, 1000) as unknown as number;
+    }
   } else {
     // Stop real-time sync
     if (realTimeInterval !== null) {

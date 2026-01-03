@@ -1,6 +1,5 @@
 <template>
-  <main :style="{ '--dark': `${darkValue.toFixed(2)}%`, '--text-contrast': `${textContrastComputed.toFixed(2)}%` }">
-    <TimeControls v-model="currentMinutes" />
+  <main :style="cssVariables">
     <DebugInfo 
       :sun-info="sunInfo"
       :current-minutes="currentMinutes"
@@ -18,6 +17,10 @@
     <Sundial
       :events="sundialEvents"
       :progress-angle="sunProgressAngle"
+      v-model="currentMinutes"
+      :is-override="isOverrideMode"
+      @dragging="handleDragging"
+      @reset="handleReset"
     />
     <footer class="attribution">
       Sun data from <a href="https://sunrise-sunset.org/" target="_blank" rel="noopener noreferrer">sunrise-sunset.org</a>
@@ -28,16 +31,18 @@
 <script setup lang="ts">
 import { onMounted, ref, watch, computed } from "vue";
 import { useSunCalculations, type SunInformation, formatTime, formatDuration, getTimeMinutes } from "./composables/useSunCalculations";
+import { useColorCalculations } from "./composables/useColorCalculations";
 import Sundial from "./components/Sundial.vue";
 import InfoDisplay from "./components/InfoDisplay.vue";
-import TimeControls from "./components/TimeControls.vue";
 import DebugInfo from "./components/DebugInfo.vue";
 
 const lat = 47.3769;
 const lng = 8.5417;
 
-// Time state - can be controlled by demo mode or real time
+// Time state - can be controlled by override mode or real time
 const currentMinutes = ref(0);
+const isDragging = ref(false);
+const isOverrideMode = ref(false);
 
 // Sun information state
 const sunInfo = ref<SunInformation | null>(null);
@@ -54,46 +59,33 @@ const { darkValue, currentLux, sundialEvents, sunProgressAngle, nextEventInfo } 
   currentMinutes
 );
 
+// Use color calculations composable
+const { bgHue, bgSaturation, bgLightness, bgLightnessDarker, textHue, textSaturation, textLightness } = useColorCalculations(
+  sunInfo,
+  currentMinutes,
+  darkValue
+);
+
 // Computed current time display
 const currentTime = computed(() => formatTime(currentMinutes.value));
 
-// Computed text contrast value - ensures text is always readable
-// Uses hysteresis to avoid sudden flips and creates more natural contrast
-const textContrast = ref(50); // Track previous value for hysteresis
-
+// Computed text contrast value - kept for backward compatibility with DebugInfo
 const textContrastComputed = computed(() => {
-  const dark = darkValue.value;
-  const previous = textContrast.value;
-  
-  // Use hysteresis: different thresholds for switching up vs down
-  // This prevents rapid flipping when hovering around 50%
-  const thresholdUp = 42;   // Switch to light text when going above this
-  const thresholdDown = 58; // Switch to dark text when going below this
-  const extremeContrast = 75; // Push to extremes for maximum readability
-  
-  let newContrast: number;
-  
-  // Determine if we should use light or dark text
-  if (dark < thresholdDown && (previous < 50 || dark < thresholdUp)) {
-    // Lighter background - use DARK text
-    // Push text to near maximum darkness (85-100%) for strong contrast
-    newContrast = Math.min(100, Math.max(dark + extremeContrast, 90));
-  } else if (dark > thresholdUp && (previous >= 50 || dark > thresholdDown)) {
-    // Darker background - use LIGHT text  
-    // Push text to near minimum darkness (0-10%) for strong contrast
-    newContrast = Math.max(0, Math.min(dark - extremeContrast, 10));
-  } else {
-    // In the transition zone - maintain current state to avoid flipping
-    newContrast = previous;
-  }
-  
-  // Smooth transition to avoid sudden jumps (but allow faster transitions)
-  const smoothingFactor = Math.abs(newContrast - previous) > 30 ? 0.5 : 0.2; // Faster when big change needed
-  const smoothed = previous + (newContrast - previous) * smoothingFactor;
-  textContrast.value = smoothed;
-  
-  return smoothed;
+  // Text lightness is already computed by useColorCalculations
+  // This is just for display in DebugInfo
+  return textLightness.value;
 });
+
+// CSS variables object for dynamic styling
+const cssVariables = computed(() => ({
+  '--tint': `${bgHue.value}`,
+  '--sat': `${bgSaturation.value}%`,
+  '--light': `${bgLightness.value}%`,
+  '--light-darker': `${bgLightnessDarker.value}%`,
+  '--tint-comp': `${textHue.value}`,
+  '--sat-text': `${textSaturation.value}%`,
+  '--light-comp': `${textLightness.value}%`,
+}));
 
 // Watch for changes in currentMinutes to update calculations
 watch(currentMinutes, () => {
@@ -111,6 +103,21 @@ function getCurrentTimeMinutes(): number {
   return getTimeMinutes(now.getHours(), now.getMinutes(), now.getSeconds());
 }
 
+// Handle dragging state from sundial
+function handleDragging(dragging: boolean) {
+  isDragging.value = dragging;
+  if (dragging) {
+    isOverrideMode.value = true;
+  }
+}
+
+// Handle reset from sundial
+function handleReset() {
+  const now = new Date();
+  currentMinutes.value = getTimeMinutes(now.getHours(), now.getMinutes(), now.getSeconds());
+  isOverrideMode.value = false;
+}
+
 // Fetch and update sun information
 async function fetchSunInfo() {
   try {
@@ -123,14 +130,36 @@ async function fetchSunInfo() {
   }
 }
 
+// Real-time ticker - updates time every second when not in override mode
+let realTimeInterval: number | null = null;
+
+watch([isOverrideMode, isDragging], ([override, dragging]) => {
+  if (!override && !dragging) {
+    // Start real-time sync only if not in override mode and not dragging
+    if (realTimeInterval === null) {
+      realTimeInterval = setInterval(() => {
+        // Double-check we're still not in override mode or dragging
+        if (!isOverrideMode.value && !isDragging.value) {
+          const now = new Date();
+          currentMinutes.value = getTimeMinutes(now.getHours(), now.getMinutes(), now.getSeconds());
+        }
+      }, 1000) as unknown as number;
+    }
+  } else {
+    // Stop real-time sync
+    if (realTimeInterval !== null) {
+      clearInterval(realTimeInterval);
+      realTimeInterval = null;
+    }
+  }
+}, { immediate: true });
+
 onMounted(() => {
   // Initialize with current time
   currentMinutes.value = getCurrentTimeMinutes();
   
   // Fetch sun information
   fetchSunInfo();
-
-  // TimeControls handles time updates (both real-time and demo mode)
 
   // Update sun information every minute (since it changes daily)
   setInterval(() => {
@@ -150,27 +179,25 @@ main {
   padding-top: 25vh;
   gap: 2rem;
 
-  --base-light-color: #fffde9;
-  --base-dark-color: #141821;
-
-  --dark: 50%;
-  --text-contrast: 50%;
-  --darker: min(var(--dark) + 20%, 100%);
-  --light: calc(100% - var(--dark) + 10%);
+  /* HSL-based color system with tints based on time of day */
+  /* Variables set dynamically from Vue computed properties */
+  --tint: 240;              /* Hue: changes based on sun cycle */
+  --sat: 10%;               /* Saturation: kept low (10-15%) */
+  --light: 50%;             /* Lightness: inverse of darkness */
+  --light-darker: 40%;      /* Darker variant for gradient */
+  --tint-comp: 60;          /* Complementary hue for text */
+  --sat-text: 15%;          /* Text saturation */
+  --light-comp: 50%;        /* Complementary lightness for text */
   
-  /* Background: mix based on darkness value */
-  --bg: color-mix(in oklab, var(--base-light-color) var(--light), var(--base-dark-color) var(--dark));
-  --bg-darker: color-mix(in oklab, var(--base-light-color) var(--light), var(--base-dark-color) var(--darker));
+  /* Background colors using HSL */
+  --bg: hsl(var(--tint), var(--sat), var(--light));
+  --bg-darker: hsl(var(--tint), var(--sat), var(--light-darker));
 
+  /* Radial gradient background for depth */
   background: radial-gradient(circle at bottom, var(--bg-darker) 0%, var(--bg) 100%);
   
-  /* Text: use more extreme mixing for better contrast
-     When text-contrast is high (>50%), we want dark text (more dark color)
-     When text-contrast is low (<50%), we want light text (more light color)
-     Use a wider range to push colors further apart */
-  --text-dark-amount: var(--text-contrast);
-  --text-light-amount: calc(100% - var(--text-contrast));
-  color: color-mix(in oklab, var(--base-light-color) var(--text-light-amount), var(--base-dark-color) var(--text-dark-amount));
+  /* Text color using complementary hue and inverted lightness */
+  color: hsl(var(--tint-comp), var(--sat-text), var(--light-comp));
 }
 
 .attribution {

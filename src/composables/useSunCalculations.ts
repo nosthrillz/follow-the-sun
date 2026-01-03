@@ -99,7 +99,16 @@ function luxToDarkness(lux: number): number {
   const logLux = Math.log10(Math.max(minLux, Math.min(maxLux, lux)));
   
   // Map log scale to darkness: logMin -> 100%, logMax -> 0%
-  const darkness = 100 - ((logLux - logMin) / (logMax - logMin)) * 100;
+  const linearDarkness = 100 - ((logLux - logMin) / (logMax - logMin)) * 100;
+  
+  // Apply a gentler curve for smoother transitions
+  // Use ease-in-out cubic for more natural feel
+  const normalized = linearDarkness / 100; // 0-1
+  const t = normalized;
+  const curved = t < 0.5 
+    ? 4 * t * t * t  // Ease-in cubic for first half
+    : 1 - Math.pow(-2 * t + 2, 3) / 2; // Ease-out cubic for second half
+  const darkness = curved * 100;
   
   return Math.max(0, Math.min(100, darkness));
 }
@@ -114,29 +123,74 @@ function calculateLux(
   civilTwilightEnd: number,
   referenceDate?: Date
 ): number {
-  // Deep night (before civil twilight or after)
-  if (minutes < civilTwilightBegin || minutes > civilTwilightEnd) {
-    // Calculate current moon illumination and convert to lux
-    // Use reference date (today) but adjust time to match the minutes we're calculating for
-    const date = referenceDate || new Date();
-    const dateWithTime = new Date(date);
-    dateWithTime.setHours(Math.floor(minutes / 60));
-    dateWithTime.setMinutes(minutes % 60);
-    dateWithTime.setSeconds(0);
+  // Define transition periods (in minutes) for smooth blending
+  const TWILIGHT_TRANSITION = 30; // 30 minutes before civil twilight for smooth transition
+  
+  // Calculate transition boundaries
+  const preDawnTransition = civilTwilightBegin - TWILIGHT_TRANSITION;
+  const postDuskTransition = civilTwilightEnd + TWILIGHT_TRANSITION;
+  
+  // Get moon lux for reference
+  const date = referenceDate || new Date();
+  const dateWithTime = new Date(date);
+  dateWithTime.setHours(Math.floor(minutes / 60));
+  dateWithTime.setMinutes(minutes % 60);
+  dateWithTime.setSeconds(0);
+  const moonLux = getMoonLux(dateWithTime);
+  
+  // Calculate night progression for gradual lightening toward dawn
+  const nightStart = civilTwilightEnd;
+  const nightEnd = civilTwilightBegin + (24 * 60); // Next dawn (wrapping around midnight)
+  
+  // Deep night (well before transition or well after)
+  if (minutes < preDawnTransition || minutes > postDuskTransition) {
+    // Add gradual lightening as we progress through the night toward dawn
+    let minutesIntoNight: number;
+    if (minutes > civilTwilightEnd) {
+      // After dusk, before midnight
+      minutesIntoNight = minutes - nightStart;
+    } else {
+      // After midnight, before dawn
+      minutesIntoNight = (24 * 60 - nightStart) + minutes;
+    }
     
-    const moonLux = getMoonLux(dateWithTime);
-    return moonLux;
+    const nightDuration = nightEnd - nightStart;
+    const nightProgress = minutesIntoNight / nightDuration; // 0 to 1 through the night
+    
+    // Apply a gentle curve: start at base moon lux, gradually increase toward pre-dawn
+    // At midnight (50% through): stay at base
+    // As we approach dawn (90%+): gradually increase lux for lighter darkness
+    const NIGHT_LIGHTENING_FACTOR = 3.0; // Multiply lux by up to 3x as we approach dawn
+    let lighteningMultiplier = 1.0;
+    
+    if (nightProgress > 0.5) {
+      // After midnight, gradually lighten
+      const postMidnightProgress = (nightProgress - 0.5) / 0.5; // 0 to 1 from midnight to dawn
+      // Smooth ease-in curve
+      const easedProgress = postMidnightProgress * postMidnightProgress;
+      lighteningMultiplier = 1.0 + (easedProgress * (NIGHT_LIGHTENING_FACTOR - 1.0));
+    }
+    
+    return moonLux * lighteningMultiplier;
   }
   
-  // Civil twilight (gentle transition)
+  // Pre-dawn transition: smooth blend from moon to civil twilight
+  if (minutes >= preDawnTransition && minutes < civilTwilightBegin) {
+    const progress = (minutes - preDawnTransition) / TWILIGHT_TRANSITION;
+    // Smooth ease-in-out curve
+    const easedProgress = smoothStep(progress);
+    return lerp(moonLux, LUX_VALUES.CIVIL_TWILIGHT_MIN, easedProgress);
+  }
+  
+  // Civil twilight to sunrise (gentle transition)
   if (minutes >= civilTwilightBegin && minutes < sunrise) {
     const progress = (minutes - civilTwilightBegin) / (sunrise - civilTwilightBegin);
-    // Gentle curve - stays darker longer
+    // Gentle curve - stays darker longer, then accelerates
     const easedProgress = progress * progress;
     return lerp(LUX_VALUES.CIVIL_TWILIGHT_MIN, LUX_VALUES.SUNRISE_SUNSET, easedProgress);
   }
   
-  // SUNRISE MOMENT - dramatic increase, then gradual to peak
+  // Sunrise to solar noon - dramatic increase, then gradual to peak
   if (minutes >= sunrise && minutes < solarNoon) {
     const duration = solarNoon - sunrise;
     const progress = (minutes - sunrise) / duration;
@@ -145,38 +199,38 @@ function calculateLux(
     // Remaining 80%: gradual increase to peak (1000 -> 100000 lux)
     if (progress < 0.2) {
       const earlyProgress = progress / 0.2;
-      // Steep exponential curve for sunrise moment
-      const steepProgress = 1 - Math.pow(1 - earlyProgress, 3);
+      // Smooth exponential curve for sunrise moment
+      const steepProgress = smoothStep(earlyProgress);
       return lerp(LUX_VALUES.SUNRISE_SUNSET, LUX_VALUES.CIVIL_TWILIGHT_MAX, steepProgress);
     } else {
       const lateProgress = (progress - 0.2) / 0.8;
-      // Gentle quadratic curve - gradual increase, flatter near peak
-      const curveProgress = lateProgress * lateProgress;
+      // Gentle ease-out curve - gradual increase, flatter near peak
+      const curveProgress = 1 - Math.pow(1 - lateProgress, 2); // Ease-out quadratic
       return lerp(LUX_VALUES.CIVIL_TWILIGHT_MAX, LUX_VALUES.NOON_DIRECT_SUN, curveProgress);
     }
   }
   
-  // MIDDAY (solar noon to sunset) - flat peak, then gradual decrease
+  // Solar noon to sunset - flat peak, then gradual decrease
   if (minutes >= solarNoon && minutes < sunset) {
     const duration = sunset - solarNoon;
     const progress = (minutes - solarNoon) / duration;
     
     // First 50%: stay at peak (very flat midday)
-    // Last 50%: gradual decrease approaching sunset (starts ~2-2.5 hours before sunset)
+    // Last 50%: gradual decrease approaching sunset
     if (progress < 0.5) {
-      // Stay at peak with minimal variation
-      return LUX_VALUES.NOON_DIRECT_SUN * (1 - progress * 0.05); // 2.5% variation over first half
+      // Stay at peak with minimal variation - use smooth curve
+      const earlyProgress = progress / 0.5;
+      const smooth = 1 - (smoothStep(earlyProgress) * 0.05); // Smooth 5% reduction
+      return LUX_VALUES.NOON_DIRECT_SUN * smooth;
     } else {
       const lateProgress = (progress - 0.5) / 0.5;
-      // Gentle logarithmic decrease - starts gradual, gets steeper near sunset
-      // Use a curve that's gentle at first, then accelerates
-      const curveProgress = lateProgress * lateProgress; // Quadratic for gradual start
-      // Interpolate from 95% of peak down to sunset level
+      // Smooth ease-in curve - starts gradual, accelerates near sunset
+      const curveProgress = smoothStep(lateProgress);
       return lerp(LUX_VALUES.NOON_DIRECT_SUN * 0.95, LUX_VALUES.SUNRISE_SUNSET, curveProgress);
     }
   }
   
-  // SUNSET MOMENT - dramatic decrease
+  // Sunset to civil twilight end - dramatic decrease
   if (minutes >= sunset && minutes <= civilTwilightEnd) {
     const duration = civilTwilightEnd - sunset;
     const progress = (minutes - sunset) / duration;
@@ -185,25 +239,51 @@ function calculateLux(
     // Remaining 70%: gentle transition to twilight
     if (progress < 0.3) {
       const earlyProgress = progress / 0.3;
-      // Steep exponential curve for sunset moment
-      const steepProgress = Math.pow(earlyProgress, 3);
+      // Smooth exponential curve for sunset moment
+      const steepProgress = Math.pow(earlyProgress, 2);
       return lerp(LUX_VALUES.SUNRISE_SUNSET, LUX_VALUES.CIVIL_TWILIGHT_MAX, 1 - steepProgress);
     } else {
       const lateProgress = (progress - 0.3) / 0.7;
       // Gentle curve to twilight
-      const gentleProgress = lateProgress * lateProgress;
+      const gentleProgress = smoothStep(lateProgress);
       return lerp(LUX_VALUES.CIVIL_TWILIGHT_MAX, LUX_VALUES.CIVIL_TWILIGHT_MIN, gentleProgress);
     }
   }
   
+  // Post-dusk transition: smooth blend from civil twilight to moon
+  if (minutes > civilTwilightEnd && minutes <= postDuskTransition) {
+    const progress = (minutes - civilTwilightEnd) / TWILIGHT_TRANSITION;
+    // Smooth ease-in-out curve
+    const easedProgress = smoothStep(progress);
+    return lerp(LUX_VALUES.CIVIL_TWILIGHT_MIN, moonLux, easedProgress);
+  }
+  
   // Fallback
-  return LUX_VALUES.NIGHT_FULL_MOON;
+  return moonLux;
 }
 
 // Convert minutes since midnight to angle in radians
 export function minutesToAngle(minutes: number): number {
   const progress = minutes / (24 * 60);
   return (progress * 2 * Math.PI) - (Math.PI / 2);
+}
+
+// Convert angle in radians to minutes since midnight (inverse of minutesToAngle)
+export function angleToMinutes(angle: number): number {
+  // Normalize angle to [0, 2π)
+  let normalizedAngle = angle % (2 * Math.PI);
+  if (normalizedAngle < 0) {
+    normalizedAngle += 2 * Math.PI;
+  }
+  
+  // Convert from angle (starting at -π/2 for midnight) to progress [0, 1)
+  // Angle starts at -π/2 (midnight), so we add π/2 to shift it
+  const shiftedAngle = normalizedAngle + (Math.PI / 2);
+  const progress = shiftedAngle / (2 * Math.PI);
+  
+  // Convert progress to minutes, wrapping to [0, 24*60)
+  const minutes = (progress % 1) * (24 * 60);
+  return minutes;
 }
 
 export function useSunCalculations(sunInfo: Ref<SunInformation | null>, currentMinutes: Ref<number>) {
