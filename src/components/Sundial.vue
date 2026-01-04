@@ -4,11 +4,7 @@
       ref="svgElement"
       class="sundial"
       viewBox="0 0 200 200"
-      @mousemove="handleMouseMove"
-      @mouseup="handleMouseUp"
-      @mouseleave="handleMouseUp"
-      @touchmove="handleTouchMove"
-      @touchend="handleTouchEnd"
+      @mouseleave="handleMouseLeave"
     >
       <!-- Outer circle -->
       <circle cx="100" cy="100" r="95" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3"/>
@@ -62,9 +58,9 @@
         class="draggable-handle"
         :class="{ 'dragging': isDragging }"
         @mousedown="handleMouseDown"
+        @touchstart="handleTouchStart"
         @mouseenter="isHovering = true"
         @mouseleave="handleMouseLeave"
-        @touchstart="handleTouchStart"
       />
 
       <!-- Center dot (clickable when in override mode) -->
@@ -132,6 +128,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useEventListener } from '@vueuse/core';
 import type { SundialEvent } from '../composables/useSunCalculations';
 import { angleToMinutes } from '../composables/useSunCalculations';
 
@@ -213,21 +210,10 @@ function handleMouseDown(event: MouseEvent) {
   updateTimeFromPosition(event.clientX, event.clientY);
 }
 
-function handleMouseMove(event: MouseEvent) {
-  if (!isDragging.value) return;
-  updateTimeFromPosition(event.clientX, event.clientY);
-}
-
 function handleMouseLeave() {
   if (!isDragging.value) {
     isHovering.value = false;
   }
-}
-
-function handleMouseUp() {
-  isDragging.value = false;
-  isHovering.value = false;
-  emit('dragging', false);
 }
 
 // Touch handlers
@@ -241,20 +227,34 @@ function handleTouchStart(event: TouchEvent) {
   }
 }
 
-function handleTouchMove(event: TouchEvent) {
+// Document-level listeners for drag continuation
+useEventListener(document, 'mousemove', (event: MouseEvent) => {
+  if (!isDragging.value) return;
+  updateTimeFromPosition(event.clientX, event.clientY);
+});
+
+useEventListener(document, 'mouseup', () => {
+  if (!isDragging.value) return;
+  isDragging.value = false;
+  isHovering.value = false;
+  emit('dragging', false);
+});
+
+useEventListener(document, 'touchmove', (event: TouchEvent) => {
   if (!isDragging.value) return;
   event.preventDefault();
   const touch = event.touches[0];
   if (touch) {
     updateTimeFromPosition(touch.clientX, touch.clientY);
   }
-}
+}, { passive: false });
 
-function handleTouchEnd() {
+useEventListener(document, 'touchend', () => {
+  if (!isDragging.value) return;
   isDragging.value = false;
   isHovering.value = false;
   emit('dragging', false);
-}
+});
 
 // Handle reset button click
 function handleReset() {
