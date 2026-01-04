@@ -1,21 +1,25 @@
 <template>
   <div class="flex flex-col gap-1 md:text-lg">
-    <div class="info-item">
-      <span class="label">Current time:</span>
-      <span class="value">{{ currentTime }}</span>
-    </div>
-    <div class="info-item">
-      <span class="label">Next event:</span>
-      <span class="value">{{ nextEvent }}</span>
-    </div>
-    <div class="info-item">
-      <span class="label">Time until:</span>
-      <span class="value">{{ timeUntil }}</span>
-    </div>
-    <div class="info-item">
-      <span class="label">UI Darkness:</span>
-      <span class="value">{{ blendPercentage.toFixed(2) }}%</span>
-    </div>
+    <table>
+      <tbody>
+        <tr>
+          <td>Current time</td>
+          <td>{{ currentTime }}</td>
+        </tr>
+        <tr>
+          <td>Next event</td>
+          <td>{{ nextEvent }}</td>
+        </tr>
+        <tr>
+          <td>Time until</td>
+          <td>{{ timeUntil }}</td>
+        </tr>
+        <tr>
+          <td>UI Darkness</td>
+          <td>{{ blendPercentage.toFixed(2) }}%</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </template>
 
@@ -31,6 +35,16 @@ defineProps<Props>();
 </script>
 
 <style scoped>
+table {
+  tr td {
+    font-weight: bold;
+    &:first-child {
+      padding-right: 1rem;
+      text-align: right;
+      font-weight: normal;
+    }
+  }
+}
 
 .info-item {
   display: flex;
