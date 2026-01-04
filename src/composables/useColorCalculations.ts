@@ -1,179 +1,154 @@
 import { computed, type Ref } from 'vue';
 import { timeToMinutes, type SunInformation } from './useSunCalculations';
 
-// Convert HSL to hex color
-function hslToHex(h: number, s: number, l: number): string {
-  // Normalize values
-  h = h % 360;
-  s = Math.max(0, Math.min(100, s)) / 100;
-  l = Math.max(0, Math.min(100, l)) / 100;
-
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
-  const m = l - c / 2;
-
-  let r = 0, g = 0, b = 0;
-
-  if (h >= 0 && h < 60) {
-    r = c; g = x; b = 0;
-  } else if (h >= 60 && h < 120) {
-    r = x; g = c; b = 0;
-  } else if (h >= 120 && h < 180) {
-    r = 0; g = c; b = x;
-  } else if (h >= 180 && h < 240) {
-    r = 0; g = x; b = c;
-  } else if (h >= 240 && h < 300) {
-    r = x; g = 0; b = c;
-  } else if (h >= 300 && h < 360) {
-    r = c; g = 0; b = x;
-  }
-
-  r = Math.round((r + m) * 255);
-  g = Math.round((g + m) * 255);
-  b = Math.round((b + m) * 255);
-
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-}
-
-// Calculate hue based on sun cycle (Rayleigh scattering)
-// Night: blue (240°), Sunrise: deep blue→lighter blue→yellow (240°→220°→60°, skipping green), Day: yellow-white (60°), Sunset: red→blue (0°→240°, via purple/magenta, skipping green)
+// Calculate hue based on the provided color table
+// Hue values represent the sky color at different times of day
+// Lightness is calculated separately from lux (physics-based)
 function calculateHue(
   minutes: number,
   sunrise: number,
   sunset: number,
   solarNoon: number,
   civilTwilightBegin: number,
-  civilTwilightEnd: number
+  civilTwilightEnd: number,
+  nauticalTwilightBegin: number,
+  nauticalTwilightEnd: number,
+  astroTwilightBegin: number,
+  astroTwilightEnd: number
 ): number {
   const dayLength = 24 * 60;
   
-  // Normalize minutes to handle day transitions
-  let normalizedMinutes = minutes;
-  if (normalizedMinutes < civilTwilightBegin) {
-    normalizedMinutes += dayLength;
+  // Helper to normalize hue differences (handles wraparound)
+  function lerpHue(h1: number, h2: number, t: number): number {
+    // Find shortest path between hues
+    const diff = ((h2 - h1 + 540) % 360) - 180;
+    return (h1 + diff * t + 360) % 360;
   }
-
-  // Night (before civil twilight or after civil twilight end)
-  if (minutes < civilTwilightBegin || minutes > civilTwilightEnd) {
-    // Stay blue throughout the night - no cyan/green tints
-    // Simple variation: slightly deeper blue at deepest night
-    const nightStart = civilTwilightEnd;
-    const nightEnd = civilTwilightBegin + (24 * 60); // Next dawn (wrapping around midnight)
-    const nightDuration = nightEnd - nightStart;
-    
+  
+  // Helper for linear interpolation
+  function lerp(start: number, end: number, t: number): number {
+    return start + (end - start) * t;
+  }
+  
+  // Night (between astro twilight end and astro twilight begin, wrapping around midnight)
+  const isNight = minutes > astroTwilightEnd || minutes < astroTwilightBegin;
+  
+  if (isNight) {
+    const nightStart = astroTwilightEnd;
     let minutesIntoNight: number;
-    if (minutes > civilTwilightEnd) {
-      // After dusk, before midnight
+    let nightDuration: number;
+    
+    if (minutes > astroTwilightEnd) {
+      // Evening/night: after astro twilight end
+      const nightEnd = astroTwilightBegin + dayLength;
+      nightDuration = nightEnd - nightStart;
       minutesIntoNight = minutes - nightStart;
     } else {
-      // After midnight, before dawn
-      minutesIntoNight = (24 * 60 - nightStart) + minutes;
+      // Early morning: before astro twilight begin
+      nightDuration = (dayLength - nightStart) + astroTwilightBegin;
+      minutesIntoNight = (dayLength - nightStart) + minutes;
     }
     
-    const progress = minutesIntoNight / nightDuration; // 0 to 1 through the night
+    const progress = minutesIntoNight / nightDuration;
+    const midnightProgress = Math.abs(progress - 0.5) * 2; // 0 at midnight, 1 at edges
     
-    // Transition through the night - stay in blue range (235°-245°)
-    // Start: blue (240°) where sunset ended
-    // Middle: deeper blue (245°) at deepest night
-    // End: lighter blue (235°) as we approach dawn
-    if (progress < 0.4) {
-      // First 40% of night: blue (240°) → deeper blue (245°)
-      const earlyProgress = progress / 0.4;
-      return 240 + (earlyProgress * 5); // 240° → 245°
-    } else if (progress < 0.6) {
-      // Middle 20% of night: stay at deeper blue (245°)
-      return 245;
-    } else {
-      // Last 40% of night: deeper blue (245°) → lighter blue (235°)
-      const lateProgress = (progress - 0.6) / 0.4;
-      return 245 - (lateProgress * 10); // 245° → 235°
-    }
+    // Night hue: deep blue (240°) at midnight, lighter blue (235°) at edges
+    return lerpHue(240, 235, midnightProgress);
   }
 
-  // Civil twilight before sunrise: deep blue → lighter blue → yellow (skip green/cyan)
+  // Astronomical Twilight (begin)
+  if (minutes >= astroTwilightBegin && minutes < nauticalTwilightBegin) {
+    const progress = (minutes - astroTwilightBegin) / (nauticalTwilightBegin - astroTwilightBegin);
+    // Astro to Nautical: 230° → 225°
+    return lerpHue(230, 225, progress);
+  }
+
+  // Nautical Twilight (begin)
+  if (minutes >= nauticalTwilightBegin && minutes < civilTwilightBegin) {
+    const progress = (minutes - nauticalTwilightBegin) / (civilTwilightBegin - nauticalTwilightBegin);
+    // Nautical to Blue Hour: 225° → 215°
+    return lerpHue(225, 215, progress);
+  }
+
+  // Civil Twilight / Blue Hour (morning)
   if (minutes >= civilTwilightBegin && minutes < sunrise) {
     const progress = (minutes - civilTwilightBegin) / (sunrise - civilTwilightBegin);
-    
-    // First 40%: deep blue (240°) → lighter blue (220°)
-    // Next 60%: lighter blue (220°) → yellow (60°), skipping green/cyan range
-    // To avoid green (120°-180°), we go forwards through purple/magenta/red: 220° → 240° → 300° → 0° → 60°
-    if (progress < 0.4) {
-      // First 40%: deep blue (240°) → lighter blue (220°)
-      const earlyProgress = progress / 0.4;
-      return 240 - (earlyProgress * 20); // 240° → 220°
+    // Blue Hour (215°) → Golden Hour (35°) → Sunrise (15°)
+    if (progress < 0.5) {
+      const t = progress * 2;
+      return lerpHue(215, 35, t);
     } else {
-      // Last 60%: lighter blue (220°) → yellow (60°)
-      // Go forwards through purple/magenta/red to avoid green: 220° → 240° → 300° → 0° → 60°
-      const lateProgress = (progress - 0.4) / 0.6;
-      // Distance going forwards: from 220° to 60° = (60 - 220 + 360) % 360 = 200°
-      // Formula: start at 220°, add 200° * progress, wrap around
-      return (220 + (200 * lateProgress)) % 360;
+      const t = (progress - 0.5) * 2;
+      return lerpHue(35, 15, t);
     }
   }
 
-  // Sunrise to solar noon: red → yellow → white-yellow
+  // Sunrise to Morning Light
   if (minutes >= sunrise && minutes < solarNoon) {
     const progress = (minutes - sunrise) / (solarNoon - sunrise);
-    
-    // First 30%: red (0°) → orange (30°)
-    // Next 40%: orange (30°) → yellow (60°)
-    // Last 30%: yellow (60°) → white-yellow (60°, but we'll handle saturation separately)
+    // Sunrise (15°) → Morning Light (205°) → Solar Noon (210°)
     if (progress < 0.3) {
-      return 0 + (progress / 0.3) * 30;
-    } else if (progress < 0.7) {
-      return 30 + ((progress - 0.3) / 0.4) * 30;
+      const t = progress / 0.3;
+      return lerpHue(15, 205, t);
     } else {
-      return 60; // Stay at yellow, saturation will decrease
+      const t = (progress - 0.3) / 0.7;
+      return lerpHue(205, 210, t);
     }
   }
 
-  // Solar noon to sunset: yellow-white → yellow → orange → red
+  // Solar Noon to Afternoon Light
   if (minutes >= solarNoon && minutes < sunset) {
     const progress = (minutes - solarNoon) / (sunset - solarNoon);
-    
-    // First 50%: stay at yellow (60°)
-    // Last 50%: yellow (60°) → orange (30°) → red (0°)
-    if (progress < 0.5) {
-      return 60;
+    // Solar Noon (210°) → Afternoon Light (205°) → Sunset (15°)
+    if (progress < 0.3) {
+      const t = progress / 0.3;
+      return lerpHue(210, 205, t);
     } else {
-      const lateProgress = (progress - 0.5) / 0.5;
-      return 60 - (lateProgress * 60);
+      const t = (progress - 0.3) / 0.7;
+      return lerpHue(205, 15, t);
     }
   }
 
-  // Sunset to civil twilight end: red → orange → blue
+  // Sunset to Civil Twilight End
   if (minutes >= sunset && minutes <= civilTwilightEnd) {
     const progress = (minutes - sunset) / (civilTwilightEnd - sunset);
-    
-    // First 30%: red (0°) → orange (20°)
-    // Next 30%: orange (20°) → red (0°) - deepening red
-    // Last 40%: red (0°) → blue (240°) - wrap through purple/magenta
-    if (progress < 0.3) {
-      return 0 + (progress / 0.3) * 20;
-    } else if (progress < 0.6) {
-      const midProgress = (progress - 0.3) / 0.3;
-      return 20 - (midProgress * 20); // Back to red
+    // Sunset (15°) → Golden Hour (30°) → Blue Hour (220°)
+    if (progress < 0.4) {
+      const t = progress / 0.4;
+      return lerpHue(15, 30, t);
     } else {
-      const lateProgress = (progress - 0.6) / 0.4;
-      // From red (0°) to blue (240°) - go backwards through purple/magenta to avoid green
-      // Go backwards: 0° → 300° → 240° (120° backwards total)
-      return (360 - (lateProgress * 120)) % 360;
+      const t = (progress - 0.4) / 0.6;
+      return lerpHue(30, 220, t);
     }
   }
 
-  return 240; // Default to blue (night)
+  // Civil Twilight End to Nautical Twilight End
+  if (minutes > civilTwilightEnd && minutes <= nauticalTwilightEnd) {
+    const progress = (minutes - civilTwilightEnd) / (nauticalTwilightEnd - civilTwilightEnd);
+    // Blue Hour (220°) → Nautical (230°)
+    return lerpHue(220, 230, progress);
+  }
+
+  // Nautical Twilight End to Astronomical Twilight End
+  if (minutes > nauticalTwilightEnd && minutes <= astroTwilightEnd) {
+    const progress = (minutes - nauticalTwilightEnd) / (astroTwilightEnd - nauticalTwilightEnd);
+    // Nautical (230°) → Astro (240°)
+    return lerpHue(230, 240, progress);
+  }
+
+  // Default to deep night blue
+  return 240;
 }
 
 // Calculate saturation based on time of day
-// Low saturation overall (10-15% as specified)
+// Keep saturation in 10-15% range as specified
 function calculateSaturation(
   minutes: number,
   sunrise: number,
   sunset: number,
   solarNoon: number,
   civilTwilightBegin: number,
-  civilTwilightEnd: number,
-  darkValue: number
+  civilTwilightEnd: number
 ): number {
   // Keep saturation subtle overall (10-15% range)
   // Slightly higher during sunrise/sunset for warmth
@@ -189,8 +164,8 @@ function calculateSaturation(
     const maxDistance = Math.max(solarNoon - sunrise, sunset - solarNoon);
     const normalizedDistance = Math.min(1, distanceFromNoon / maxDistance);
     
-    // At noon: 8% (nearly white), at edges: 15% (subtle color)
-    return 8 + (normalizedDistance * 7);
+    // At noon: 10% (nearly white), at edges: 15% (subtle color)
+    return 10 + (normalizedDistance * 5);
   } else if (isTwilight) {
     // During twilight: moderate saturation (12-15%)
     const isMorningTwilight = minutes < sunrise;
@@ -200,7 +175,7 @@ function calculateSaturation(
     return 12 + (progress * 3); // 12% to 15%
   } else {
     // Night: low saturation (10-12%)
-    return 10 + (darkValue / 100 * 2); // Slight variation based on darkness
+    return 10 + (Math.sin(minutes / 60 * Math.PI * 2) * 0.5 + 0.5) * 2; // Slight variation
   }
 }
 
@@ -214,9 +189,9 @@ export function useColorCalculations(
   currentMinutes: Ref<number>,
   darkValue: Ref<number>
 ) {
-  // Calculate background HSL components
+  // Calculate background hue based on time periods (sky colors)
   const bgHue = computed(() => {
-    if (!sunInfo.value) return 0;
+    if (!sunInfo.value) return 240;
     
     const minutes = currentMinutes.value;
     const sunrise = timeToMinutes(sunInfo.value.results.sunrise);
@@ -224,8 +199,23 @@ export function useColorCalculations(
     const solarNoon = timeToMinutes(sunInfo.value.results.solar_noon);
     const civilTwilightBegin = timeToMinutes(sunInfo.value.results.civil_twilight_begin);
     const civilTwilightEnd = timeToMinutes(sunInfo.value.results.civil_twilight_end);
+    const nauticalTwilightBegin = timeToMinutes(sunInfo.value.results.nautical_twilight_begin);
+    const nauticalTwilightEnd = timeToMinutes(sunInfo.value.results.nautical_twilight_end);
+    const astroTwilightBegin = timeToMinutes(sunInfo.value.results.astronomical_twilight_begin);
+    const astroTwilightEnd = timeToMinutes(sunInfo.value.results.astronomical_twilight_end);
 
-    return calculateHue(minutes, sunrise, sunset, solarNoon, civilTwilightBegin, civilTwilightEnd);
+    return calculateHue(
+      minutes,
+      sunrise,
+      sunset,
+      solarNoon,
+      civilTwilightBegin,
+      civilTwilightEnd,
+      nauticalTwilightBegin,
+      nauticalTwilightEnd,
+      astroTwilightBegin,
+      astroTwilightEnd
+    );
   });
 
   const bgSaturation = computed(() => {
@@ -238,20 +228,20 @@ export function useColorCalculations(
     const civilTwilightBegin = timeToMinutes(sunInfo.value.results.civil_twilight_begin);
     const civilTwilightEnd = timeToMinutes(sunInfo.value.results.civil_twilight_end);
 
-    return calculateSaturation(minutes, sunrise, sunset, solarNoon, civilTwilightBegin, civilTwilightEnd, darkValue.value);
+    return calculateSaturation(minutes, sunrise, sunset, solarNoon, civilTwilightBegin, civilTwilightEnd);
   });
 
+  // Calculate background lightness from darkness (lux-based, continuous)
   const bgLightness = computed(() => {
-    // Lightness: inverse of darkValue (darkValue 0% = lightness 100%, darkValue 100% = lightness 0%)
-    // But we never reach pure black/white, so clamp to 5%-95%
-    const lightness = 100 - darkValue.value;
-    return Math.max(5, Math.min(95, lightness));
+    // Lightness is inverse of darkness
+    return 100 - darkValue.value;
   });
 
   // Calculate darker variant for gradient (slightly darker)
   const bgLightnessDarker = computed(() => {
     const lightness = bgLightness.value;
-    return Math.max(5, Math.min(95, lightness - 10));
+    // Ensure we don't go below 0% or above 100%
+    return Math.max(0, Math.min(100, lightness - 10));
   });
 
   // Calculate text color with complementary hue
@@ -281,19 +271,6 @@ export function useColorCalculations(
     return contrastLightness;
   });
 
-  // Computed colors as hex for compatibility (if needed)
-  const backgroundColor = computed(() => {
-    return hslToHex(bgHue.value, bgSaturation.value, bgLightness.value);
-  });
-
-  const backgroundColorDarker = computed(() => {
-    return hslToHex(bgHue.value, bgSaturation.value, bgLightnessDarker.value);
-  });
-
-  const textColor = computed(() => {
-    return hslToHex(textHue.value, textSaturation.value, textLightness.value);
-  });
-
   return {
     // HSL component values for CSS variables
     bgHue,
@@ -303,10 +280,6 @@ export function useColorCalculations(
     textHue,
     textSaturation,
     textLightness,
-    // Hex colors for backward compatibility
-    backgroundColor,
-    backgroundColorDarker,
-    textColor,
   };
 }
 
