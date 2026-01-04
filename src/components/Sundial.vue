@@ -1,8 +1,8 @@
 <template>
-  <div class="sundial-container">
-    <svg 
+  <div class="relative inline-block">
+    <svg
       ref="svgElement"
-      class="sundial" 
+      class="sundial"
       viewBox="0 0 200 200"
       @mousemove="handleMouseMove"
       @mouseup="handleMouseUp"
@@ -68,47 +68,47 @@
       />
 
       <!-- Center dot (clickable when in override mode) -->
-      <circle 
-        cx="100" 
-        cy="100" 
-        :r="isOverride ? (isCenterHovering ? 7 : 5) : 3" 
-        fill="currentColor" 
+      <circle
+        cx="100"
+        cy="100"
+        :r="isOverride ? (isCenterHovering ? 7 : 5) : 3"
+        fill="currentColor"
         :opacity="isOverride ? (isCenterHovering ? 1 : 0.8) : 0.5"
         :class="{ 'center-dot-override': isOverride, 'center-dot': !isOverride }"
         @click="handleCenterClick"
         @mouseenter="handleCenterEnter"
         @mouseleave="handleCenterLeave"
       />
-      
+
       <!-- Subtle reset icon when in override mode -->
-      <g 
-        v-if="isOverride" 
-        class="reset-icon" 
+      <g
+        v-if="isOverride"
+        class="reset-icon"
         @click="handleReset"
         @mouseenter="handleCenterEnter"
         @mouseleave="handleCenterLeave"
       >
-        <circle 
-          cx="100" 
-          cy="100" 
-          r="10" 
-          fill="none" 
-          stroke="currentColor" 
-          stroke-width="1" 
+        <circle
+          cx="100"
+          cy="100"
+          r="10"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1"
           :opacity="isCenterHovering ? 0.5 : 0.2"
           class="reset-icon-circle"
         />
-        <path 
-          d="M 95 100 L 100 95 M 100 95 L 105 100 M 105 100 L 100 105 M 100 105 L 95 100" 
-          stroke="currentColor" 
-          stroke-width="1.5" 
+        <path
+          d="M 95 100 L 100 95 M 100 95 L 105 100 M 105 100 L 100 105 M 100 105 L 95 100"
+          stroke="currentColor"
+          stroke-width="1.5"
           stroke-linecap="round"
           :opacity="isCenterHovering ? 0.9 : 0.5"
           fill="none"
           class="reset-icon-path"
         />
       </g>
-      
+
       <!-- Reset text when in override mode -->
       <text
         v-if="isOverride"
@@ -156,32 +156,32 @@ const isCenterHovering = ref(false);
 
 const progressArc = computed(() => {
   if (props.progressAngle === null) return '';
-  
+
   const radius = 90;
   const centerX = 100;
   const centerY = 100;
   const startAngle = -Math.PI / 2;
-  
+
   const startX = centerX + radius * Math.cos(startAngle);
   const startY = centerY + radius * Math.sin(startAngle);
   const endX = centerX + radius * Math.cos(props.progressAngle);
   const endY = centerY + radius * Math.sin(props.progressAngle);
-  
+
   const angleDiff = props.progressAngle - startAngle;
   const largeArc = Math.abs(angleDiff) > Math.PI ? 1 : 0;
-  
+
   return `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY}`;
 });
 
 // Get mouse/touch position relative to SVG
 function getSVGPoint(clientX: number, clientY: number): { x: number; y: number } | null {
   if (!svgElement.value) return null;
-  
+
   const svg = svgElement.value;
   const point = svg.createSVGPoint();
   point.x = clientX;
   point.y = clientY;
-  
+
   const svgPoint = point.matrixTransform(svg.getScreenCTM()?.inverse());
   return { x: svgPoint.x, y: svgPoint.y };
 }
@@ -199,7 +199,7 @@ function calculateAngle(x: number, y: number): number {
 function updateTimeFromPosition(clientX: number, clientY: number) {
   const point = getSVGPoint(clientX, clientY);
   if (!point) return;
-  
+
   const angle = calculateAngle(point.x, point.y);
   const minutes = angleToMinutes(angle);
   emit('update:modelValue', minutes);
@@ -280,12 +280,6 @@ function handleCenterLeave() {
 </script>
 
 <style scoped>
-.sundial-container {
-  margin-top: 2rem;
-  position: relative;
-  display: inline-block;
-}
-
 .sundial {
   width: 300px;
   height: 300px;

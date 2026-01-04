@@ -1,6 +1,6 @@
 <template>
-  <main :style="cssVariables">
-    <h1 class="text-4xl md:text-6xl lg:text-8xl xl:text-9xl font-black">Follow the Sun</h1>
+  <main :style="cssVariables" class="gap-4 md:gap-6 lg:gap-12">
+    <h1 class="text-4xl  md:text-6xl lg:text-8xl xl:text-9xl font-black">Follow the Sun</h1>
     <Sundial
       :events="sundialEvents"
       :progress-angle="sunProgressAngle"
@@ -193,7 +193,6 @@ main {
   flex-direction: column;
   align-items: center;
   padding-top: 10vh;
-  gap: 4rem;
 
   /* HSL-based color system with tints based on time of day */
   /* Variables set dynamically from Vue computed properties */
