@@ -1,5 +1,5 @@
 import { computed, type Ref } from 'vue';
-import { timeToMinutes, type SunInformation } from './useSunCalculations';
+import { extractSunTimes, type SunInformation } from './useSunCalculations';
 
 // Calculate hue based on the provided color table
 // Hue values represent the sky color at different times of day
@@ -194,27 +194,19 @@ export function useColorCalculations(
     if (!sunInfo.value) return 240;
     
     const minutes = currentMinutes.value;
-    const sunrise = timeToMinutes(sunInfo.value.results.sunrise);
-    const sunset = timeToMinutes(sunInfo.value.results.sunset);
-    const solarNoon = timeToMinutes(sunInfo.value.results.solar_noon);
-    const civilTwilightBegin = timeToMinutes(sunInfo.value.results.civil_twilight_begin);
-    const civilTwilightEnd = timeToMinutes(sunInfo.value.results.civil_twilight_end);
-    const nauticalTwilightBegin = timeToMinutes(sunInfo.value.results.nautical_twilight_begin);
-    const nauticalTwilightEnd = timeToMinutes(sunInfo.value.results.nautical_twilight_end);
-    const astroTwilightBegin = timeToMinutes(sunInfo.value.results.astronomical_twilight_begin);
-    const astroTwilightEnd = timeToMinutes(sunInfo.value.results.astronomical_twilight_end);
+    const times = extractSunTimes(sunInfo.value);
 
     return calculateHue(
       minutes,
-      sunrise,
-      sunset,
-      solarNoon,
-      civilTwilightBegin,
-      civilTwilightEnd,
-      nauticalTwilightBegin,
-      nauticalTwilightEnd,
-      astroTwilightBegin,
-      astroTwilightEnd
+      times.sunrise,
+      times.sunset,
+      times.solarNoon,
+      times.civilTwilightBegin,
+      times.civilTwilightEnd,
+      times.nauticalTwilightBegin,
+      times.nauticalTwilightEnd,
+      times.astroTwilightBegin,
+      times.astroTwilightEnd
     );
   });
 
@@ -222,13 +214,9 @@ export function useColorCalculations(
     if (!sunInfo.value) return 10;
     
     const minutes = currentMinutes.value;
-    const sunrise = timeToMinutes(sunInfo.value.results.sunrise);
-    const sunset = timeToMinutes(sunInfo.value.results.sunset);
-    const solarNoon = timeToMinutes(sunInfo.value.results.solar_noon);
-    const civilTwilightBegin = timeToMinutes(sunInfo.value.results.civil_twilight_begin);
-    const civilTwilightEnd = timeToMinutes(sunInfo.value.results.civil_twilight_end);
+    const times = extractSunTimes(sunInfo.value);
 
-    return calculateSaturation(minutes, sunrise, sunset, solarNoon, civilTwilightBegin, civilTwilightEnd);
+    return calculateSaturation(minutes, times.sunrise, times.sunset, times.solarNoon, times.civilTwilightBegin, times.civilTwilightEnd);
   });
 
   // Calculate background lightness from darkness (lux-based, continuous)

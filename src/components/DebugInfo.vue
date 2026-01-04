@@ -51,7 +51,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, DialogOverlay } from '@headlessui/vue';
-import { timeToMinutes, formatTime, type SunInformation } from '../composables/useSunCalculations';
+import { extractSunTimes, formatTime, type SunInformation } from '../composables/useSunCalculations';
 import { getMoonIllumination, getMoonPhase } from '../composables/useMoonCalculations';
 
 interface Props {
@@ -100,15 +100,16 @@ const moonPhaseName = computed(() => {
   return 'Waning Crescent';
 });
 
-const astroTwilightBegin = computed(() => props.sunInfo ? timeToMinutes(props.sunInfo.results.astronomical_twilight_begin) : 0);
-const astroTwilightEnd = computed(() => props.sunInfo ? timeToMinutes(props.sunInfo.results.astronomical_twilight_end) : 0);
-const nauticalTwilightBegin = computed(() => props.sunInfo ? timeToMinutes(props.sunInfo.results.nautical_twilight_begin) : 0);
-const nauticalTwilightEnd = computed(() => props.sunInfo ? timeToMinutes(props.sunInfo.results.nautical_twilight_end) : 0);
-const civilTwilightBegin = computed(() => props.sunInfo ? timeToMinutes(props.sunInfo.results.civil_twilight_begin) : 0);
-const civilTwilightEnd = computed(() => props.sunInfo ? timeToMinutes(props.sunInfo.results.civil_twilight_end) : 0);
-const sunrise = computed(() => props.sunInfo ? timeToMinutes(props.sunInfo.results.sunrise) : 0);
-const sunset = computed(() => props.sunInfo ? timeToMinutes(props.sunInfo.results.sunset) : 0);
-const solarNoon = computed(() => props.sunInfo ? timeToMinutes(props.sunInfo.results.solar_noon) : 0);
+const sunTimes = computed(() => props.sunInfo ? extractSunTimes(props.sunInfo) : null);
+const astroTwilightBegin = computed(() => sunTimes.value?.astroTwilightBegin ?? 0);
+const astroTwilightEnd = computed(() => sunTimes.value?.astroTwilightEnd ?? 0);
+const nauticalTwilightBegin = computed(() => sunTimes.value?.nauticalTwilightBegin ?? 0);
+const nauticalTwilightEnd = computed(() => sunTimes.value?.nauticalTwilightEnd ?? 0);
+const civilTwilightBegin = computed(() => sunTimes.value?.civilTwilightBegin ?? 0);
+const civilTwilightEnd = computed(() => sunTimes.value?.civilTwilightEnd ?? 0);
+const sunrise = computed(() => sunTimes.value?.sunrise ?? 0);
+const sunset = computed(() => sunTimes.value?.sunset ?? 0);
+const solarNoon = computed(() => sunTimes.value?.solarNoon ?? 0);
 
 const formatMinutes = (minutes: number) => formatTime(minutes);
 

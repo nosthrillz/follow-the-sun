@@ -46,21 +46,5 @@ table {
   }
 }
 
-.info-item {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  align-items: baseline;
-}
-
-.label {
-  font-weight: 500;
-  opacity: 0.8;
-}
-
-.value {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
 </style>
 

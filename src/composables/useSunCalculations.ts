@@ -300,36 +300,66 @@ export function angleToMinutes(angle: number): number {
   return minutes;
 }
 
+// Helper interface for extracted time values
+interface SunTimeValues {
+  civilTwilightBegin: number;
+  civilTwilightEnd: number;
+  nauticalTwilightBegin: number;
+  nauticalTwilightEnd: number;
+  astroTwilightBegin: number;
+  astroTwilightEnd: number;
+  sunrise: number;
+  sunset: number;
+  solarNoon: number;
+}
+
+// Extract all time values from sunInfo
+export function extractSunTimes(sunInfo: SunInformation): SunTimeValues {
+  return {
+    civilTwilightBegin: timeToMinutes(sunInfo.results.civil_twilight_begin),
+    civilTwilightEnd: timeToMinutes(sunInfo.results.civil_twilight_end),
+    nauticalTwilightBegin: timeToMinutes(sunInfo.results.nautical_twilight_begin),
+    nauticalTwilightEnd: timeToMinutes(sunInfo.results.nautical_twilight_end),
+    astroTwilightBegin: timeToMinutes(sunInfo.results.astronomical_twilight_begin),
+    astroTwilightEnd: timeToMinutes(sunInfo.results.astronomical_twilight_end),
+    sunrise: timeToMinutes(sunInfo.results.sunrise),
+    sunset: timeToMinutes(sunInfo.results.sunset),
+    solarNoon: timeToMinutes(sunInfo.results.solar_noon),
+  };
+}
+
+// Event definitions for sundial and next event calculations
+const SUN_EVENT_DEFINITIONS = [
+  { name: 'Astronomical Twilight Begin', label: 'Astro', key: 'astronomical_twilight_begin' as const, isMajor: false },
+  { name: 'Nautical Twilight Begin', label: 'Nautical', key: 'nautical_twilight_begin' as const, isMajor: false },
+  { name: 'Civil Twilight Begin', label: 'Civil', key: 'civil_twilight_begin' as const, isMajor: false },
+  { name: 'Sunrise', label: 'Sunrise', key: 'sunrise' as const, isMajor: true },
+  { name: 'Solar Noon', label: 'Noon', key: 'solar_noon' as const, isMajor: true },
+  { name: 'Sunset', label: 'Sunset', key: 'sunset' as const, isMajor: true },
+  { name: 'Civil Twilight End', label: 'Civil', key: 'civil_twilight_end' as const, isMajor: false },
+  { name: 'Nautical Twilight End', label: 'Nautical', key: 'nautical_twilight_end' as const, isMajor: false },
+  { name: 'Astronomical Twilight End', label: 'Astro', key: 'astronomical_twilight_end' as const, isMajor: false },
+] as const;
+
 export function useSunCalculations(sunInfo: Ref<SunInformation | null>, currentMinutes: Ref<number>) {
   const calculateDarkValue = (): number => {
     if (!sunInfo.value) return 50;
     const minutes = currentMinutes.value;
-
-    const civilTwilightBegin = timeToMinutes(sunInfo.value.results.civil_twilight_begin);
-    const civilTwilightEnd = timeToMinutes(sunInfo.value.results.civil_twilight_end);
-    const nauticalTwilightBegin = timeToMinutes(sunInfo.value.results.nautical_twilight_begin);
-    const nauticalTwilightEnd = timeToMinutes(sunInfo.value.results.nautical_twilight_end);
-    const astroTwilightBegin = timeToMinutes(sunInfo.value.results.astronomical_twilight_begin);
-    const astroTwilightEnd = timeToMinutes(sunInfo.value.results.astronomical_twilight_end);
-    const sunrise = timeToMinutes(sunInfo.value.results.sunrise);
-    const sunset = timeToMinutes(sunInfo.value.results.sunset);
-    const solarNoon = timeToMinutes(sunInfo.value.results.solar_noon);
-
-    // Use today's date for moon calculations (even in demo mode, moon phase is based on actual date)
+    const times = extractSunTimes(sunInfo.value);
     const today = new Date();
 
     // Calculate approximate lux based on time of day
     const lux = calculateLux(
       minutes,
-      sunrise,
-      sunset,
-      solarNoon,
-      civilTwilightBegin,
-      civilTwilightEnd,
-      nauticalTwilightBegin,
-      nauticalTwilightEnd,
-      astroTwilightBegin,
-      astroTwilightEnd,
+      times.sunrise,
+      times.sunset,
+      times.solarNoon,
+      times.civilTwilightBegin,
+      times.civilTwilightEnd,
+      times.nauticalTwilightBegin,
+      times.nauticalTwilightEnd,
+      times.astroTwilightBegin,
+      times.astroTwilightEnd,
       today
     );
 
@@ -340,23 +370,11 @@ export function useSunCalculations(sunInfo: Ref<SunInformation | null>, currentM
   const calculateSundialEvents = (): SundialEvent[] => {
     if (!sunInfo.value) return [];
 
-    const events = [
-      { name: 'Astronomical Twilight Begin', label: 'Astro', minutes: timeToMinutes(sunInfo.value.results.astronomical_twilight_begin), isMajor: false },
-      { name: 'Nautical Twilight Begin', label: 'Nautical', minutes: timeToMinutes(sunInfo.value.results.nautical_twilight_begin), isMajor: false },
-      { name: 'Civil Twilight Begin', label: 'Civil', minutes: timeToMinutes(sunInfo.value.results.civil_twilight_begin), isMajor: false },
-      { name: 'Sunrise', label: 'Sunrise', minutes: timeToMinutes(sunInfo.value.results.sunrise), isMajor: true },
-      { name: 'Solar Noon', label: 'Noon', minutes: timeToMinutes(sunInfo.value.results.solar_noon), isMajor: true },
-      { name: 'Sunset', label: 'Sunset', minutes: timeToMinutes(sunInfo.value.results.sunset), isMajor: true },
-      { name: 'Civil Twilight End', label: 'Civil', minutes: timeToMinutes(sunInfo.value.results.civil_twilight_end), isMajor: false },
-      { name: 'Nautical Twilight End', label: 'Nautical', minutes: timeToMinutes(sunInfo.value.results.nautical_twilight_end), isMajor: false },
-      { name: 'Astronomical Twilight End', label: 'Astro', minutes: timeToMinutes(sunInfo.value.results.astronomical_twilight_end), isMajor: false },
-    ];
-
-    return events.map(event => ({
-      name: event.name,
-      label: event.label,
-      angle: minutesToAngle(event.minutes),
-      isMajor: event.isMajor
+    return SUN_EVENT_DEFINITIONS.map(def => ({
+      name: def.name,
+      label: def.label,
+      angle: minutesToAngle(timeToMinutes(sunInfo.value!.results[def.key])),
+      isMajor: def.isMajor
     }));
   };
 
@@ -370,15 +388,10 @@ export function useSunCalculations(sunInfo: Ref<SunInformation | null>, currentM
     }
 
     const events: Event[] = [
-      { name: 'Astronomical Twilight Begin', minutes: timeToMinutes(sunInfo.value.results.astronomical_twilight_begin) },
-      { name: 'Nautical Twilight Begin', minutes: timeToMinutes(sunInfo.value.results.nautical_twilight_begin) },
-      { name: 'Civil Twilight Begin', minutes: timeToMinutes(sunInfo.value.results.civil_twilight_begin) },
-      { name: 'Sunrise', minutes: timeToMinutes(sunInfo.value.results.sunrise) },
-      { name: 'Solar Noon', minutes: timeToMinutes(sunInfo.value.results.solar_noon) },
-      { name: 'Sunset', minutes: timeToMinutes(sunInfo.value.results.sunset) },
-      { name: 'Civil Twilight End', minutes: timeToMinutes(sunInfo.value.results.civil_twilight_end) },
-      { name: 'Nautical Twilight End', minutes: timeToMinutes(sunInfo.value.results.nautical_twilight_end) },
-      { name: 'Astronomical Twilight End', minutes: timeToMinutes(sunInfo.value.results.astronomical_twilight_end) },
+      ...SUN_EVENT_DEFINITIONS.map(def => ({
+        name: def.name,
+        minutes: timeToMinutes(sunInfo.value!.results[def.key])
+      })),
       { name: 'Midnight', minutes: 24 * 60 },
     ];
 
@@ -412,17 +425,9 @@ export function useSunCalculations(sunInfo: Ref<SunInformation | null>, currentM
   const currentLux = computed(() => {
     if (!sunInfo.value) return 0;
     const minutes = currentMinutes.value;
-    const civilTwilightBegin = timeToMinutes(sunInfo.value.results.civil_twilight_begin);
-    const civilTwilightEnd = timeToMinutes(sunInfo.value.results.civil_twilight_end);
-    const nauticalTwilightBegin = timeToMinutes(sunInfo.value.results.nautical_twilight_begin);
-    const nauticalTwilightEnd = timeToMinutes(sunInfo.value.results.nautical_twilight_end);
-    const astroTwilightBegin = timeToMinutes(sunInfo.value.results.astronomical_twilight_begin);
-    const astroTwilightEnd = timeToMinutes(sunInfo.value.results.astronomical_twilight_end);
-    const sunrise = timeToMinutes(sunInfo.value.results.sunrise);
-    const sunset = timeToMinutes(sunInfo.value.results.sunset);
-    const solarNoon = timeToMinutes(sunInfo.value.results.solar_noon);
+    const times = extractSunTimes(sunInfo.value);
     const today = new Date();
-    return calculateLux(minutes, sunrise, sunset, solarNoon, civilTwilightBegin, civilTwilightEnd, nauticalTwilightBegin, nauticalTwilightEnd, astroTwilightBegin, astroTwilightEnd, today);
+    return calculateLux(minutes, times.sunrise, times.sunset, times.solarNoon, times.civilTwilightBegin, times.civilTwilightEnd, times.nauticalTwilightBegin, times.nauticalTwilightEnd, times.astroTwilightBegin, times.astroTwilightEnd, today);
   });
 
   const sundialEvents = computed(() => calculateSundialEvents());

@@ -37,7 +37,7 @@
         :sun-info="sunInfo"
         :current-minutes="currentMinutes"
         :dark-value="darkValue"
-        :text-contrast="textContrastComputed"
+        :text-contrast="textLightness"
         :current-lux="currentLux"
         :bg-hue="bgHue"
         :bg-saturation="bgSaturation"
@@ -94,13 +94,6 @@ const { bgHue, bgSaturation, bgLightness, bgLightnessDarker, textHue, textSatura
 // Computed current time display
 const currentTime = computed(() => formatTime(currentMinutes.value));
 
-// Computed text contrast value - kept for backward compatibility with DebugInfo
-const textContrastComputed = computed(() => {
-  // Text lightness is already computed by useColorCalculations
-  // This is just for display in DebugInfo
-  return textLightness.value;
-});
-
 // CSS variables object for dynamic styling
 const cssVariables = computed(() => ({
   '--tint': `${bgHue.value}`,
@@ -111,16 +104,6 @@ const cssVariables = computed(() => ({
   '--sat-text': `${textSaturation.value}%`,
   '--light-comp': `${textLightness.value}%`,
 }));
-
-// Watch for changes in currentMinutes to update calculations
-watch(currentMinutes, () => {
-  // Calculations are reactive through the composable
-}, { immediate: true });
-
-// Watch for changes in sunInfo to update calculations
-watch(sunInfo, () => {
-  // Calculations are reactive through the composable
-}, { immediate: true });
 
 // Initialize current time
 function getCurrentTimeMinutes(): number {
