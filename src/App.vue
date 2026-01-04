@@ -1,45 +1,53 @@
 <template>
-  <main :style="cssVariables" class="gap-4 md:gap-6 lg:gap-12">
-    <h1 class="text-4xl  md:text-6xl lg:text-8xl xl:text-9xl font-black">Follow the Sun</h1>
-    <Sundial
-      :events="sundialEvents"
-      :progress-angle="sunProgressAngle"
-      v-model="currentMinutes"
-      :is-override="isOverrideMode"
-      @dragging="handleDragging"
-      @reset="handleReset"
-    />
-    <InfoDisplay
-      :current-time="currentTime"
-      :next-event="nextEventInfo.event"
-      :time-until="formatDuration(nextEventInfo.minutesUntil)"
-      :blend-percentage="darkValue"
-    />
-    <footer class="footer">
-      <button class="debug-button" @click="isDebugOpen = true">
-        Debug
-      </button>
-      <div class="attribution">
-        Sun data from <a href="https://sunrise-sunset.org/" target="_blank" rel="noopener noreferrer">sunrise-sunset.org</a>
-      </div>
-    </footer>
+  <main :style="cssVariables" class="grid place-items-center">
+    <!-- Front-drop overlay for smooth loading transition -->
+    <div
+      class="front-drop"
+      :class="{ 'fade-out': isLoaded }"
+      :style="{ pointerEvents: isLoaded ? 'none' : 'auto' }"
+    ></div>
+    <div class="flex flex-col items-center gap-4 md:gap-6 lg:gap-12">
+      <h1 class="text-4xl md:text-6xl lg:text-8xl xl:text-9xl font-black">Follow the Sun</h1>
+      <Sundial
+        :events="sundialEvents"
+        :progress-angle="sunProgressAngle"
+        v-model="currentMinutes"
+        :is-override="isOverrideMode"
+        @dragging="handleDragging"
+        @reset="handleReset"
+      />
+      <InfoDisplay
+        :current-time="currentTime"
+        :next-event="nextEventInfo.event"
+        :time-until="formatDuration(nextEventInfo.minutesUntil)"
+        :blend-percentage="darkValue"
+      />
+      <footer class="footer">
+        <button class="debug-button" @click="isDebugOpen = true">
+          Debug
+        </button>
+        <div class="attribution">
+          Sun data from <a href="https://sunrise-sunset.org/" target="_blank" rel="noopener noreferrer">sunrise-sunset.org</a>
+        </div>
+      </footer>
 
-    <DebugInfo
-      :open="isDebugOpen"
-      @close="isDebugOpen = false"
-      :sun-info="sunInfo"
-      :current-minutes="currentMinutes"
-      :dark-value="darkValue"
-      :text-contrast="textContrastComputed"
-      :current-lux="currentLux"
-      :bg-hue="bgHue"
-      :bg-saturation="bgSaturation"
-      :bg-lightness="bgLightness"
-      :bg-lightness-darker="bgLightnessDarker"
-      :text-hue="textHue"
-      :text-saturation="textSaturation"
-      :text-lightness="textLightness"
-    />
+      <DebugInfo
+        :open="isDebugOpen"
+        @close="isDebugOpen = false"
+        :sun-info="sunInfo"
+        :current-minutes="currentMinutes"
+        :dark-value="darkValue"
+        :text-contrast="textContrastComputed"
+        :current-lux="currentLux"
+        :bg-hue="bgHue"
+        :bg-saturation="bgSaturation"
+        :bg-lightness="bgLightness"
+        :bg-lightness-darker="bgLightnessDarker"
+        :text-hue="textHue"
+        :text-saturation="textSaturation"
+        :text-lightness="textLightness"
+      />
+    </div>
   </main>
 </template>
 
@@ -59,6 +67,7 @@ const currentMinutes = ref(0);
 const isDragging = ref(false);
 const isOverrideMode = ref(false);
 const isDebugOpen = ref(false);
+const isLoaded = ref(false);
 
 // Sun information state
 const sunInfo = ref<SunInformation | null>(null);
@@ -175,7 +184,12 @@ onMounted(() => {
   currentMinutes.value = getCurrentTimeMinutes();
 
   // Fetch sun information
-  fetchSunInfo();
+  fetchSunInfo().finally(() => {
+    // Wait a brief moment for initial render and color calculations, then start fade-out
+    setTimeout(() => {
+      isLoaded.value = true;
+    }, 200);
+  });
 
   // Update sun information every minute (since it changes daily)
   setInterval(() => {
@@ -189,20 +203,16 @@ onMounted(() => {
 main {
   width: 100vw;
   height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 10vh;
 
   /* HSL-based color system with tints based on time of day */
   /* Variables set dynamically from Vue computed properties */
-  --tint: 240;              /* Hue: changes based on sun cycle */
-  --sat: 10%;               /* Saturation: kept low (10-15%) */
-  --light: 50%;             /* Lightness: inverse of darkness */
-  --light-darker: 40%;      /* Darker variant for gradient */
-  --tint-comp: 60;          /* Complementary hue for text */
-  --sat-text: 15%;          /* Text saturation */
-  --light-comp: 50%;        /* Complementary lightness for text */
+  --tint: 0;              /* Hue: changes based on sun cycle */
+  --sat: 0;               /* Saturation: kept low (10-15%) */
+  --light: 0;             /* Lightness: inverse of darkness */
+  --light-darker: 0;      /* Darker variant for gradient */
+  --tint-comp: 0;          /* Complementary hue for text */
+  --sat-text: 0;          /* Text saturation */
+  --light-comp: 100%;        /* Complementary lightness for text */
 
   /* Background colors using HSL */
   --bg: hsl(var(--tint), var(--sat), var(--light));
@@ -255,6 +265,26 @@ main {
 
 .attribution a:hover {
   opacity: 1;
+}
+
+.front-drop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000000;
+  z-index: 9999;
+  opacity: 1;
+  transition: opacity 1.5s ease-out;
+  pointer-events: auto;
+}
+
+.front-drop.fade-out {
+  opacity: 0;
+  pointer-events: none;
 }
 
 </style>
